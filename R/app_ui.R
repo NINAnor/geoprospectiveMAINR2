@@ -10,7 +10,23 @@ app_ui <- function(request) {
     golem_add_external_resources(),
     # Your application UI logic
     fluidPage(
-      h1("geoprospectiveMAINR2")
+      useShinyjs(),
+      titlePanel(title =  div(img(src="logo.png", width ='120'), 'Geoprospective round 2'), windowTitle = "Geopros 2" ),
+      tabsetPanel(id = "inTabset",
+                  tabPanel(
+                    title = "Load study", value = "p0",
+                    h5("Please provide your study id that you received from the admin"),
+                    br(),
+                    textInput("site_id","Enter the site id from your invitation"),
+                    br(),
+                    uiOutput("cond_0")
+                  ),
+                  # tabPanel(
+                  #   title = "instructions", value = "p1",
+                  #   mod_mod_training2_ui("mod_training2_1")
+                  # )
+      ),
+      uiOutput("tabs")
     )
   )
 }

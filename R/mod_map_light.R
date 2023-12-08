@@ -31,7 +31,7 @@ mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel,
       proj = "EPSG:4326",
       geodesic = FALSE
     )
-    
+    print("ENTER MAP light")
     output$es_quest_where<-renderUI(h4(paste0("Where do you find good areas for ", es_descr_sel$esNAME,"?")))
     output$es_quest_how<-renderUI(h6(paste0("How do you rate the quality of ",es_descr_sel$esNAME, " for your adjusted areas?")))
     output$rating_task<-renderUI(h4(paste0("Indicate how good the areas are to benefit from ",es_descr_sel$esNAME, " (1 = ok, 5= very good)")))

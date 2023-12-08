@@ -23,6 +23,8 @@ attachment::att_amend_desc()
 golem::add_module(name = "mod_resultsR1", with_test = TRUE) # Name of the module
 golem::add_module(name = "mod_training2", with_test = TRUE) # Name of the module
 golem::add_module(name = "mod_delphi_round2", with_test = TRUE) # Name of the module
+golem::add_module(name = "map_light", with_test = TRUE) # Name of the module
+
 
 ## Add helper functions ----
 ## Creates fct_* and utils_*
