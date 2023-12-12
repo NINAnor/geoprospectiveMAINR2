@@ -186,7 +186,7 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
                                        markerOptions = F,
                                        circleMarkerOptions = F,
                                        rectangleOptions = T,
-                                       editOptions = editToolbarOptions(),
+                                       editOptions = editToolbarOptions(selectedPathOptions = selectedPathOptions()),
                                        singleFeature = F)+
         m1
       
@@ -365,8 +365,13 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
     ## test if edited polys intersect with each other or study area -- inform user!
     observe({
       req(rv$edits)
-      rectangles <- rv$edits()$all
+      rectangles <- rv$edits()$finished
+      
       n_poly<-nrow(as.data.frame(rectangles))
+      
+      #with res of 250m grid we can sample at least 10 pts with variaton within 0.6km2
+      A_min<-250*250*sqrt(10)
+      A_max<-0.05*round(as.numeric(st_area(sf_bound)),0)
       
       if(n_poly==1){
         n_within<-nrow(as.data.frame(st_within(rectangles,sf_bound)))
@@ -377,12 +382,34 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
           removeUI(
             selector = paste0("#",ns("savepoly")))
         }else{
-          output$btn1<-renderUI(
-            actionButton(ns("savepoly"),"save")
-          )
-          output$overlay_result <- renderText({
-            "Save or draw further polygons"
-          })
+          area<-round(as.numeric(st_area(rectangles))/1000000,0)
+          min_train<-min(area)
+          max_train<-max(area)
+          if(min_train<A_min & max_train<=A_max){
+            output$overlay_result <- renderText({
+              paste("<font color=\"#FF0000\"><b>","You can`t save the polygons:","</b> <li>Your area is too small<li/></font>")
+            })
+            removeUI(
+              selector = paste0("#",ns("savepoly")))
+            
+          }else if(min_train>A_min & max_train>A_max){
+            output$overlay_result <- renderText({
+              paste("<font color=\"#FF0000\"><b>","You can`t save the polygons:","</b> <li>Your area is too big<li/></font>")
+            })
+            removeUI(
+              selector = paste0("#",ns("savepoly")))
+            
+            
+          }else{
+            output$btn1<-renderUI(
+              actionButton(ns("savepoly"),"save")
+            )
+            output$overlay_result <- renderText({
+              "Save or draw further polygons"
+            })
+            
+          }
+          
         }
         
       }else if (n_poly>1){
@@ -392,7 +419,6 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
         if(q!=0 & n_within<n_poly){
           removeUI(
             selector = paste0("#",ns("savepoly")))
-          
           output$overlay_result <- renderText({
             paste("<font color=\"#FF0000\"><b>","You can`t save the polygons:","</b><li>Place your polygon completely into the the study area<li/><li>Remove overlays<li/></font>")
             
@@ -400,7 +426,6 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
         }else if(q==0 & n_within<n_poly){
           removeUI(
             selector = paste0("#",ns("savepoly")))
-          
           output$overlay_result <- renderText({
             paste("<font color=\"#FF0000\"><b>","You can`t save the polygons:","</b> <li>Place your polygon completely into the the study area<li/></font>")
             
@@ -408,22 +433,42 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
         }else if(q!=0 & n_within==n_poly){
           removeUI(
             selector = paste0("#",ns("savepoly")))
-          
           output$overlay_result <- renderText({
             paste("<font color=\"#FF0000\"><b>","You can`t save the polygons:","</b> <li>Remove overlays<li/></font>")
             
           })
         }else if(q==0 & n_within==n_poly){
-          output$btn1<-renderUI(
-            actionButton(ns("savepoly"),"save")
-          )
-          output$overlay_result <- renderText({
-            "Save or draw further polygons"
-          })
+          area<-round(as.numeric(st_area(rectangles))/1000000,0)
+          min_train<-min(area)
+          max_train<-max(area)
+          if(min_train<A_min & max_train<=A_max){
+            output$overlay_result <- renderText({
+              paste("<font color=\"#FF0000\"><b>","You can`t save the polygons:","</b> <li>Your area is too small<li/></font>")
+            })
+            removeUI(
+              selector = paste0("#",ns("savepoly")))
+            
+          }else if(min_train>A_min & max_train>A_max){
+            output$overlay_result <- renderText({
+              paste("<font color=\"#FF0000\"><b>","You can`t save the polygons:","</b> <li>Your area is too big<li/></font>")
+            })
+            removeUI(
+              selector = paste0("#",ns("savepoly")))
+            
+            
+          }else{
+            output$btn1<-renderUI(
+              actionButton(ns("savepoly"),"save")
+            )
+            output$overlay_result <- renderText({
+              "Save or draw further polygons"
+            })
+            
+          }
         }
       }
       
-    })#/observer
+    })
     
     ## prepare the final edits, not changed, adjusted, new polys
     final_edits<-eventReactive(input$savepoly,{
@@ -681,67 +726,52 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
 
         # gee_poly<-rgee::sf_as_ee(poly_train, via = "getInfo")
         incProgress(amount = 0.2,message = "prepare training data")
-        
+
+        #cellsize
+        resolution<-250*250
         
         ## N background (outside poly points) according to area of extrapolation
         A_roi<-as.numeric(st_area(sf_bound))
-        # area of smallest poly
-        A_min<-as.numeric(min(st_area(poly_train)))
-        # area of largest poly
-        A_max<-as.numeric(max(st_area(poly_train)))
         
         # max pts for efficient extrapolation each 250x250 cell
-        max_pts<- round(A_roi/(300*300),0)
-        
-        
-        # ratio poly area vs whole area
-        ratio_A<-poly_area/A_roi
+        all_back_pts<- round(A_roi/resolution,0)
         
         ## although zooming on the map while drawing is limited, we assure that at least 10pts are within a poly
         min_in_pts<-10
-        abs_min_res<-100
-        min_in_eff_pts<-(sqrt(A_min)/abs_min_res)^2
         
+        pts_out = st_sample(sf_bound, all_back_pts,type="random")
         
-        if(min_in_eff_pts<min_in_pts){
-          pts_min <- min_in_pts
-        } else {
-          pts_min <- min_in_eff_pts
-        }
-        
-        # amount of background pts
-        pts_out<-round(1/ratio_A*pts_min,0)
-        
-        # sample backgraound pts
-        # pts_out = st_sample(sf_bound, pts_out,type="random")
-        pts_out = st_sample(sf_bound, max_pts,type="random")
-        print("sampling---")
         
         # don`t allow intersection with polygons
         pts_out <- st_difference(st_combine(pts_out), st_combine(poly_train)) %>% st_cast('POINT')
-        print("training pts---A")
         pts_out<-st_as_sf(pts_out)
-        print("training pts---B")
         pts_out$inside<-rep(0,nrow(pts_out))
         
-        print("training pts---C")
         
-        # inside pts are area + NEW es value weighted
-        points_df <- data.frame(x = numeric(0), y = numeric(0))
-        for(m in 1:nrow(poly_train)) {
-          A_tmp <- as.numeric(sf::st_area(poly_train[m,]))
+        # inside pts are area + es value weighted
+        for (i in 1:nrow(poly_train)) {
+          A_tmp <- as.numeric(st_area(poly_train[i,]))
           tmp_ratio<-A_tmp/A_roi
-          # tmp_pts = sf::st_sample(poly_train[m,], round(max_pts*tmp_ratio,0)*poly_train[m,]$es_value, type="random")
-          tmp_pts = sf::st_sample(poly_train[m,], 100, type="random")
+          tmp_pts<-round(all_back_pts*tmp_ratio,0)
           
-          points_df <- rbind(points_df, as.data.frame(sf::st_coordinates(tmp_pts)))
+          if(tmp_pts<=min_in_pts){
+            tmp_pts<-min_in_pts
+          }else{
+            tmp_pts<-tmp_pts
+          }
+          # npts in this poly must be max_pts*tmp_ratio*es_value
+          tmp_pts = st_sample(polygon[i,], tmp_pts*poly_train[i,]$es_value,type="random")
+          tmp_pts<-st_as_sf(tmp_pts)
+          tmp_pts$inside<-rep(1,nrow(tmp_pts))
+          if(i==1){
+            pts_in<-tmp_pts
+          }else{
+            pts_in<-rbind(pts_in,tmp_pts)
+          }
+          
         }
-        points_in <- sf::st_as_sf(points_df, coords = c("X", "Y"))
-        points_in$inside<-rep(1,nrow(points_in))
-        
-        print("training pts---D")
         pts_ee<-rbind(pts_out,pts_in)
-        print("training pts---E")
+
         # ee object of sampling pts 6k pts = 7sec
         pts_ee<-rgee::sf_as_ee(pts_ee, via = "getInfo")
         
