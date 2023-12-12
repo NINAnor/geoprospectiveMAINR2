@@ -89,6 +89,8 @@ mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel,
       req(rv$edits)
       rectangles <- rv$edits()$all
       n_poly<-nrow(as.data.frame(rectangles))
+      A_min<-250*250*sqrt(10)
+      A_max<-0.05*round(as.numeric(st_area(sf_bound)),0)
       
       if(n_poly==1){
         n_within<-nrow(as.data.frame(st_within(rectangles,sf_bound)))
@@ -99,12 +101,35 @@ mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel,
           removeUI(
             selector = paste0("#",ns("savepoly")))
         }else{
-          output$btn1<-renderUI(
-            actionButton(ns("savepoly"),"save")
-          )
-          output$overlay_result <- renderText({
-            "Save or draw further polygons"
-          })
+          area<-round(as.numeric(st_area(rectangles)),0)
+          min_train<-min(area)
+          max_train<-max(area)
+          
+          
+          if(min_train<A_min & max_train<=A_max){
+            output$overlay_result <- renderText({
+              paste("<font color=\"#FF0000\"><b>","You can`t save the polygons:","</b> <li>The area of the polygon is too small<li/></font>")
+            })
+            removeUI(
+              selector = paste0("#",ns("savepoly")))
+            
+          }else if(min_train>A_min & max_train>A_max){
+            output$overlay_result <- renderText({
+              paste("<font color=\"#FF0000\"><b>","You can`t save the polygons:","</b> <li>The area of the polygon is too big<li/></font>")
+            })
+            removeUI(
+              selector = paste0("#",ns("savepoly")))
+            
+            
+          }else{
+            output$btn1<-renderUI(
+              actionButton(ns("savepoly"),"save")
+            )
+            output$overlay_result <- renderText({
+              "Save or draw further polygons"
+            })
+            
+          }
         }
         
       }else if (n_poly>1){
@@ -136,12 +161,33 @@ mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel,
             
           })
         }else if(q==0 & n_within==n_poly){
-          output$btn1<-renderUI(
-            actionButton(ns("savepoly"),"save")
-          )
-          output$overlay_result <- renderText({
-            "Save or draw further polygons"
-          })
+          area<-round(as.numeric(st_area(rectangles)),0)
+          min_train<-min(area)
+          max_train<-max(area)
+          if(min_train<A_min & max_train<=A_max){
+            output$overlay_result <- renderText({
+              paste("<font color=\"#FF0000\"><b>","You can`t save the polygons:","</b> <li>The area of the last polygon was too small<li/></font>")
+            })
+            removeUI(
+              selector = paste0("#",ns("savepoly")))
+            
+          }else if(min_train>A_min & max_train>A_max){
+            output$overlay_result <- renderText({
+              paste("<font color=\"#FF0000\"><b>","You can`t save the polygons:","</b> <li>The area of the last polygon was too big<li/></font>")
+            })
+            removeUI(
+              selector = paste0("#",ns("savepoly")))
+            
+            
+          }else{
+            output$btn1<-renderUI(
+              actionButton(ns("savepoly"),"save")
+            )
+            output$overlay_result <- renderText({
+              "Save or draw further polygons"
+            })
+            
+          }
         }
       }
       
@@ -322,56 +368,40 @@ mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel,
         ############ training pts
         incProgress(amount = 0.2,message = "prepare training data")
         
-        
+        resolution<-250*250
         
         ## N background (outside poly points) according to area of extrapolation
         A_roi<-as.numeric(st_area(sf_bound))
-        # area of smallest poly
-        A_min<-as.numeric(min(st_area(polygon)))
-        # area of largest poly
-        A_max<-as.numeric(max(st_area(polygon)))
         
         # max pts for efficient extrapolation each 250x250 cell
-        max_pts<- round(A_roi/(300*300),0)
-        
-        
-        # ratio poly area vs whole area
-        ratio_A<-poly_area/A_roi
+        all_back_pts<- round(A_roi/resolution,0)
         
         ## although zooming on the map while drawing is limited, we assure that at least 10pts are within a poly
         min_in_pts<-10
-        abs_min_res<-100
-        min_in_eff_pts<-(sqrt(A_min)/abs_min_res)^2
         
-        
-        if(min_in_eff_pts<min_in_pts){
-          pts_min <- min_in_pts
-        } else {
-          pts_min <- min_in_eff_pts
-        }
-        
-        # amount of background pts
-        pts_out<-round(1/ratio_A*pts_min,0)
-        
-        # sample backgraound pts
-        # pts_out = st_sample(sf_bound, pts_out,type="random")
-        pts_out = st_sample(sf_bound, max_pts,type="random")
+        pts_out = st_sample(sf_bound, all_back_pts,type="random")
         
         # don`t allow intersection with polygons
         pts_out <- st_difference(st_combine(pts_out), st_combine(polygon)) %>% st_cast('POINT')
         pts_out<-st_as_sf(pts_out)
         pts_out$inside<-rep(0,nrow(pts_out))
         
+        
         # inside pts are area + es value weighted
         for (i in 1:nrow(polygon)) {
           A_tmp <- as.numeric(st_area(polygon[i,]))
-          #tmp_ratio<-A_tmp/A_min
           tmp_ratio<-A_tmp/A_roi
+          tmp_pts<-round(all_back_pts*tmp_ratio,0)
+          
+          if(tmp_pts<=min_in_pts){
+            tmp_pts<-min_in_pts
+          }else{
+            tmp_pts<-tmp_pts
+          }
           # npts in this poly must be max_pts*tmp_ratio*es_value
-          tmp_pts = st_sample(polygon[i,], round(max_pts*tmp_ratio,0)*polygon[i,]$es_value,type="random")
+          tmp_pts = st_sample(polygon[i,], tmp_pts*polygon[i,]$es_value,type="random")
           tmp_pts<-st_as_sf(tmp_pts)
           tmp_pts$inside<-rep(1,nrow(tmp_pts))
-          # pts_ee<-rbind(pts_all,tmp_pts)
           if(i==1){
             pts_in<-tmp_pts
           }else{
@@ -379,8 +409,8 @@ mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel,
           }
           
         }
-        # ee object of sampling pts 6k pts = 7sec
         pts_ee<-rbind(pts_out,pts_in)
+        
         pts_ee<-rgee::sf_as_ee(pts_ee, via = "getInfo")
         
         # define target bands of comb (indep. var) and sample vars by pts
