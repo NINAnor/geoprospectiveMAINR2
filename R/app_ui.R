@@ -11,7 +11,7 @@ app_ui <- function(request) {
     # Your application UI logic
     fluidPage(
       useShinyjs(),
-      titlePanel(title =  div(img(src="logo.png", width ='120'), 'Geoprospective round 2'), windowTitle = "Geopros 2" ),
+      titlePanel(title =  div(img(src="www/wendy_logo.png", width ='120'), 'Geoprospective round 2'), windowTitle = "Geopros 2" ),
       tabsetPanel(id = "inTabset",
                   tabPanel(
                     title = "Load study", value = "p0",
