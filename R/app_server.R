@@ -37,6 +37,8 @@ table_con<-data.frame(
   billing =project
 )
 
+rgee::ee_Initialize(user = 'reto.spielhofer@nina.no')
+
 
 con <- dbConnect(
   bigrquery::bigquery(),
@@ -72,7 +74,7 @@ app_server <- function(input, output, session) {
         output$cond_0<-renderUI({
           tagList(
             textInput("user_mail","Enter the email you have been contacted with"),
-            uiOutput("cond_1")
+            uiOutput("cond_1")%>% withSpinner()
           )
         })
         
@@ -88,12 +90,26 @@ app_server <- function(input, output, session) {
     }
   })
   
+  userR2<-eventReactive(input$site_id,{
+    userR2<-tbl(con, "es_mappingR2")
+    userR2<-left_join(userR2,user_conf,by="userID")%>%collect()
+    userR2<- userR2%>%select(siteID, userID)%>%filter(siteID == input$site_id)
+  })
+  
   observeEvent(input$user_mail,{
+    userR2<-userR2()
     
     if(input$user_mail %in% mapper_mail$userMAIL){
-      output$cond_1<-renderUI({
-        actionButton("load","load_data")
-      })
+      mapper_mail<-mapper_mail%>%filter(userMAIL == input$user_mail)
+      if(!(mapper_mail$userID %in% userR2$userID)){
+        output$cond_1<-renderUI({
+          actionButton("load","load your data")
+        })
+      }else{
+        output$cond_1<-renderUI({
+          h5("You have already compleated round 2, contact the administrator")
+        })
+      }
     }else{
       output$cond_1<-renderUI({
         h5("invalid email address, contact the administrator")
@@ -101,9 +117,7 @@ app_server <- function(input, output, session) {
     }
   })
   
-  observeEvent(input$load,{
-    rgee::ee_Initialize(user = 'reto.spielhofer@nina.no')
-  })
+
   
   user_id<-eventReactive(input$load,{
     uid<-mapper_mail%>%filter(siteID==input$site_id & userMAIL == input$user_mail)%>%select(userID)
@@ -125,31 +139,17 @@ app_server <- function(input, output, session) {
     userES<-as.data.frame(userES)
   })
   
-  site_type<-eventReactive(input$load,{
-    site_type<-as.character(studies%>%filter(siteID==input$site_id)%>%select(siteTYPE))
-  })
 
-  
-  blog_dat_all<-eventReactive(input$load,{
-    req(userES)
-    userES<-userES()
-    blog_dat<-tbl(con, "es_mappingR1")
-    blog_dat_all<-blog_dat%>%select(userID,esID,siteID,blog)%>%collect()
-    blog_dat_all<-blog_dat_all%>%filter(esID %in% userES$esID & siteID == input$site_id)
-
-  })
-  
-  sf_stud_geom<-eventReactive(input$load,{
-    # sf_stud_geom<-st_as_sf(studies%>%filter(studyID==input$study_id)%>%select(geometry))
+  sf_bound<-eventReactive(input$load,{
     assetid <- paste0('projects/eu-wendy/assets/study_sites/', input$site_id)
-    stud_geom <- ee$FeatureCollection(assetid)
-    sf_stud_geom<-ee_as_sf(stud_geom)
+    bound <- ee$FeatureCollection(assetid)
+    sf_bound<-ee_as_sf(bound)
   })
 
   coords<-eventReactive(input$load,{
-    req(sf_stud_geom)
-    sf_stud_geom<-sf_stud_geom()
-    coords <- st_coordinates(sf_stud_geom)
+    req(sf_bound)
+    sf_bound<-sf_bound()
+    coords <- st_coordinates(sf_bound)
     coords<-as.data.frame(coords[,c(1,2)])
   })
   
@@ -161,7 +161,7 @@ app_server <- function(input, output, session) {
     lulc<-lulc$clip(site_geom_ee)
 
     comb<-ee$Image$cat(lulc)
-    
+
   })
   
   num_tabs<-eventReactive(input$load,{
@@ -181,7 +181,7 @@ app_server <- function(input, output, session) {
       do.call(tabsetPanel, c(id="tabs_content",
                              lapply(1:num_tabs, function(i) {
                                tabPanel(title = paste("Remapping ", i), value = paste0("remap_", i),
-                                        mod_mod_delphi_round2_ui(paste0("remapping_",i))
+                                        mod_mod_delphi_round2_ui(paste0("remapping_",i))%>% withSpinner()
                                         # h4("test")
 
                                )#/tabpanel
@@ -194,11 +194,11 @@ app_server <- function(input, output, session) {
   observeEvent(input$tabs_content, {
     num_tabs<-num_tabs()
     userES<-userES()
-    sf_bound<-sf_stud_geom()
+    sf_bound<-sf_bound()
     comb<-comb()
     userID<-user_id()
-    site_type<-site_type()
-    blog_dat_all<-blog_dat_all()
+    # site_type<-site_type()
+    # blog_dat_all<-blog_dat_all()
     coords<-coords()
 
 
@@ -218,9 +218,10 @@ app_server <- function(input, output, session) {
                                          as.numeric(i),
                                          comb,
                                          bands,
-                                         blog_dat_all,
+                                         # blog_dat_all,
                                          table_con,
-                                         coords)
+                                         coords
+                                         )
       #reactive value from module as event
       observeEvent(rv$a(), {
         next_tab <- i+1

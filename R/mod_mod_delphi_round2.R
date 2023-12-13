@@ -27,9 +27,9 @@ mod_mod_delphi_round2_ui <- function(id){
       textOutput(ns("text0")),
       br(),
       fluidRow(
-        column(6,leafletOutput(ns("map_res_ind"))),
-        column(6, DTOutput(ns("blog")))
+        leafletOutput(ns("map_res_ind"))
       ),
+      DTOutput(ns("blog")),
       br(),
       uiOutput(ns("remap_poss")),
       br(),
@@ -62,7 +62,7 @@ callback <- c(
 #' mod_delphi_round2 Server Functions
 #'
 #' @noRd 
-mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_round, comb, bands, blog_dat_all, table_con, coords){
+mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_round,comb, bands, table_con, coords){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
     
@@ -70,6 +70,11 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
     rv1<-reactiveValues(
       u = reactive({})
     )
+    
+    #### get data:
+    userID_sel<-unique(userES$userID)
+    studyID<-unique(userES$siteID)
+    
     ## make ee geom
     geometry <- ee$Geometry$Rectangle(
       coords = c(min(coords$X), min(coords$Y), max(coords$X), max(coords$Y)),
@@ -77,14 +82,16 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
       geodesic = FALSE
     )
     
-    ### some rendered text and images
-    userID_sel<-unique(userES$userID)
-    studyID<-unique(userES$siteID)
-    
     userES_sel<-userES%>%dplyr::filter(userID == userID_sel)%>%slice(mapping_round)
     esID_sel<-userES_sel$esID
+    
+    #blog
+    blog_dat<-tbl(con, "es_mappingR1")
+    blog_dat_all<-blog_dat%>%select(userID,esID,siteID,blog)%>%collect()
+    blog_dat_all<-blog_dat_all%>%filter(esID_sel %in% userES$esID & siteID == studyID)
+    
 
-    output$title_es<-renderUI(h5(userES_sel$esNAME))
+    output$title_es<-renderUI(h3(userES_sel$esNAME))
     blog_dat_all<-blog_dat_all%>%dplyr::filter(esID %in% esID_sel & (blog !="NA"))%>%filter(blog!="")%>%select(blog)
     output$blog<-renderDT(blog_dat_all,rownames= FALSE, colnames="Why people choosed their sites")
     output$descr_es<-renderUI(userES_sel$esDESCR)
@@ -365,7 +372,9 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
     ## test if edited polys intersect with each other or study area -- inform user!
     observe({
       req(rv$edits)
-      rectangles <- rv$edits()$finished
+      # fin<-rv$edits()$finished
+      # edi<-rv$edits()$finished
+      rectangles <-rv$edits()$all
       
       n_poly<-nrow(as.data.frame(rectangles))
       
