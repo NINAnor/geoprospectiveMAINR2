@@ -382,7 +382,7 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
           removeUI(
             selector = paste0("#",ns("savepoly")))
         }else{
-          area<-round(as.numeric(st_area(rectangles))/1000000,0)
+          area<-round(as.numeric(st_area(rectangles)),0)
           min_train<-min(area)
           max_train<-max(area)
           if(min_train<A_min & max_train<=A_max){
@@ -438,7 +438,7 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
             
           })
         }else if(q==0 & n_within==n_poly){
-          area<-round(as.numeric(st_area(rectangles))/1000000,0)
+          area<-round(as.numeric(st_area(rectangles)),0)
           min_train<-min(area)
           max_train<-max(area)
           if(min_train<A_min & max_train<=A_max){
@@ -636,7 +636,7 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
       
     })#/observeEvent
     
-    print("-------------ENTER MOD 2.1")
+
     observeEvent(input$save_val, {
       
       insertUI(
@@ -676,45 +676,49 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
       )
       
     })#/observeEvent
-    print("-------------ENTER MOD 2.2")
+
     ## save the values of the polys in bq - recalculation of map will be postprocessing R2...
     img_ind_R2<-eventReactive(input$save_val,{
       
       withProgress(message = "save your data",value = 0.1,{
         poly_all<-final_edits()
         poly_train<-poly_all%>%dplyr::filter(status == "edited" | status == "new_drawn" | status == "no_edit_R2")
-        # poly_del<-poly_all%>%dplyr::filter(status == "deleted")
-        
+        print("-------------ENTER MOD 2.2")
         poly_train<-as.data.frame(poly_train)
-        poly_train$es_val<-rep(NA,nrow(poly_train))
+        poly_train$es_value<-rep(1,nrow(poly_train))
         sliderval<-list()
         
         # extract the values from the slider
         res<-lapply(1:nrow(poly_train),function(a){
-          var<-paste0("id_",poly_train[a,]$`_leaflet_id`)
+          var<-paste0("id_",poly_train[a,]$X_leaflet_id)
           sliderval[[a]]<-input[[var]]
           return(sliderval)
         })
         vecA <- unlist(res)
+        poly_train$es_value<-vecA
         
         # write attributes to geometry
 
-        poly_train$es_value <- vecA
+        # poly_train$es_value <- vecA
         poly_train$esID <- rep(esID_sel,nrow(poly_train))
         poly_train$userID <- rep(userID_sel,nrow(poly_train))
         poly_train$studyID <- rep(studyID,nrow(poly_train))
         poly_train$delphi_round<-rep(2, nrow(poly_train))
+        
+        # print(poly_train$es_value)
         
         n_polys <-nrow(poly_train)
         poly_train<-st_as_sf(poly_train)
         
         
         poly_area<-as.numeric(sum(st_area(poly_train)))
-        
+
         # make ee object and save
         gee_poly<-rgee::sf_as_ee(poly_train, via = "getInfo")
+
         assetId<-paste0("projects/eu-wendy/assets/es_poly_ind/",as.character(studyID),"_",as.character(esID_sel),"_",userID_sel,"_2")
         start_time<-Sys.time()
+
         task_tab <- ee_table_to_asset(
           collection = gee_poly,
           description = "test upload ind_area2",
@@ -722,9 +726,8 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
           assetId = assetId
         )
         
-        # task_tab$start()
+        task_tab$start()
 
-        # gee_poly<-rgee::sf_as_ee(poly_train, via = "getInfo")
         incProgress(amount = 0.2,message = "prepare training data")
 
         #cellsize
@@ -741,37 +744,45 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
         
         pts_out = st_sample(sf_bound, all_back_pts,type="random")
         
-        
         # don`t allow intersection with polygons
         pts_out <- st_difference(st_combine(pts_out), st_combine(poly_train)) %>% st_cast('POINT')
+
         pts_out<-st_as_sf(pts_out)
+
         pts_out$inside<-rep(0,nrow(pts_out))
         
-        
+        print("-------------ENTER MOD 2.10")
         # inside pts are area + es value weighted
         for (i in 1:nrow(poly_train)) {
+          print(i)
           A_tmp <- as.numeric(st_area(poly_train[i,]))
+          print("-------------ENTER MOD 2.10.1")
           tmp_ratio<-A_tmp/A_roi
+          print("-------------ENTER MOD 2.10.2")
           tmp_pts<-round(all_back_pts*tmp_ratio,0)
+          print("-------------ENTER MOD 2.10.3")
           
           if(tmp_pts<=min_in_pts){
             tmp_pts<-min_in_pts
           }else{
             tmp_pts<-tmp_pts
           }
+          print("-------------ENTER MOD 2.10.4")
           # npts in this poly must be max_pts*tmp_ratio*es_value
-          tmp_pts = st_sample(polygon[i,], tmp_pts*poly_train[i,]$es_value,type="random")
+          tmp_pts = st_sample(poly_train[i,], tmp_pts*poly_train[i,]$es_value,type="random")
+          print("-------------ENTER MOD 2.10.5")
           tmp_pts<-st_as_sf(tmp_pts)
+          print("-------------ENTER MOD 2.10.6")
           tmp_pts$inside<-rep(1,nrow(tmp_pts))
           if(i==1){
             pts_in<-tmp_pts
           }else{
             pts_in<-rbind(pts_in,tmp_pts)
           }
-          
+          print("i done")
         }
         pts_ee<-rbind(pts_out,pts_in)
-
+        print("-------------ENTER MOD 2.11")
         # ee object of sampling pts 6k pts = 7sec
         pts_ee<-rgee::sf_as_ee(pts_ee, via = "getInfo")
         
@@ -843,7 +854,6 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
 
         task_img$start()
         # 
-        # ind_diff<-img_ind_R2$subtract(img_ind_R1)
         
         
       })#/progress ini

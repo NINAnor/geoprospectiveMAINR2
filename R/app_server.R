@@ -45,7 +45,7 @@ con <- dbConnect(
   billing = table_con$billing
 )
 study_site<-tbl(con, "study_site")
-studies<-study_site%>%select(siteID,siteTYPE,siteNMAPPING,siteCREATETIME)%>%collect()
+studies<-study_site%>%select(siteID,siteTYPE,siteNMAPPING,siteCREATETIME,siteSTATUS)%>%collect()
 studies$siteCREATETIME<-as.POSIXct(studies$siteCREATETIME)
 
 user_conf<-tbl(con, "user_conf")
@@ -67,12 +67,21 @@ app_server <- function(input, output, session) {
   # check site id and email
   observeEvent(input$site_id,{
     if(input$site_id %in% mapper_mail$siteID){
-      output$cond_0<-renderUI({
-        tagList(
-          textInput("user_mail","Enter the email you have been contacted with"),
-          uiOutput("cond_1")
-        )
-      })}else{
+      studies<-studies%>%filter(siteID == input$site_id)%>%last()
+      if(studies$siteSTATUS == "round2_open"){
+        output$cond_0<-renderUI({
+          tagList(
+            textInput("user_mail","Enter the email you have been contacted with"),
+            uiOutput("cond_1")
+          )
+        })
+        
+      }else{
+        output$cond_0<-renderUI({
+          h5("Second Delphi round is not open yet, contact the administrator")
+        })
+      }
+    }else{
         output$cond_0<-renderUI({
                     h5("invalid siteID, contact the administrator")
         })
