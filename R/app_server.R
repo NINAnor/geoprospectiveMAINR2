@@ -46,14 +46,7 @@ con <- dbConnect(
   dataset = table_con$dataset,
   billing = table_con$billing
 )
-study_site<-tbl(con, "study_site")
-studies<-study_site%>%select(siteID,siteTYPE,siteNMAPPING,siteCREATETIME,siteSTATUS)%>%collect()
-studies$siteCREATETIME<-as.POSIXct(studies$siteCREATETIME)
 
-user_conf<-tbl(con, "user_conf")
-mapper<-tbl(con, "mapper")
-mapper_mail<-left_join(user_conf,mapper,by="userID")
-mapper_mail <- select(mapper_mail, userID, userMAIL, siteID)%>%filter(userMAIL!="")%>%collect()
 
 labels <- c("low", "moderate", "intermediate", "high","very high")
 cols   <- c("#e80909", "#fc8803", "#d8e03f", "#c4f25a","#81ab1f")
@@ -67,9 +60,28 @@ app_server <- function(input, output, session) {
   
   hideTab(inputId = "inTabset", target = "p1")
   # check site id and email
+  mapper_mail<-eventReactive(input$site_id,{
+    user_conf<-tbl(con, "user_conf")
+    mapper<-tbl(con, "mapper")
+    mapper_mail<-left_join(user_conf,mapper,by="userID")
+    mapper_mail <- select(mapper_mail, userID, userMAIL, siteID)%>%filter(userMAIL!="")%>%collect()
+    
+  })
+  
+  studies<-eventReactive(input$site_id,{
+    study_site<-tbl(con, "study_site")
+    studies<-study_site%>%select(siteID,siteTYPE,siteNMAPPING,siteCREATETIME,siteSTATUS)%>%collect()
+    studies$siteCREATETIME<-as.POSIXct(studies$siteCREATETIME)
+  })
+  
   observeEvent(input$site_id,{
+    req(mapper_mail)
+    req(studies)
+    studies<-studies()
+    mapper_mail<-mapper_mail()
     if(input$site_id %in% mapper_mail$siteID){
-      studies<-studies%>%filter(siteID == input$site_id)%>%last()
+      studies<-studies%>%filter(siteID == input$site_id)%>%
+        arrange(desc(as.POSIXct(siteCREATETIME)))%>%first()
       if(studies$siteSTATUS == "round2_open"){
         output$cond_0<-renderUI({
           tagList(
@@ -116,9 +128,7 @@ app_server <- function(input, output, session) {
       })
     }
   })
-  
 
-  
   user_id<-eventReactive(input$load,{
     uid<-mapper_mail%>%filter(siteID==input$site_id & userMAIL == input$user_mail)%>%select(userID)
     user_id<-as.character(uid[1,])
@@ -139,6 +149,12 @@ app_server <- function(input, output, session) {
     userES<-as.data.frame(userES)
   })
   
+  site_type<-eventReactive(input$load,{
+    req(studies)
+    studies<-studies()
+    site_type<-as.character(studies%>%filter(siteID==input$site_id)%>%select(siteTYPE)%>%first())
+  })
+  
 
   sf_bound<-eventReactive(input$load,{
     assetid <- paste0('projects/eu-wendy/assets/study_sites/', input$site_id)
@@ -154,14 +170,19 @@ app_server <- function(input, output, session) {
   })
   
   comb<-eventReactive(input$load,{
+    req(site_type)
+    site_type<-site_type()
     site_geom_ee<- paste0('projects/eu-wendy/assets/study_sites/', input$site_id)
     site_geom_ee <- ee$FeatureCollection(site_geom_ee)
-    lulc <- ee$Image("COPERNICUS/CORINE/V20/100m/2018")
-    lulc<-lulc$resample("bilinear")$reproject(crs= "EPSG:4326",scale=100)
-    lulc<-lulc$clip(site_geom_ee)
-
-    comb<-ee$Image$cat(lulc)
-
+    if(site_type == "onshore"){
+      lulc <- ee$Image("COPERNICUS/CORINE/V20/100m/2018")
+      lulc<-lulc$resample("bilinear")$reproject(crs= "EPSG:4326",scale=100)
+      lulc<-lulc$clip(site_geom_ee)
+      
+      comb<-ee$Image$cat(lulc)
+    }else{
+      
+    }
   })
   
   num_tabs<-eventReactive(input$load,{
