@@ -147,6 +147,8 @@ app_server <- function(input, output, session) {
       filter(userID==user_id)%>%
       left_join(es_descr,by="esID")%>%collect()
     userES<-as.data.frame(userES)
+    #shuffle rows randomly that not all the participants have the same order of mapping es
+    userES<-userES[sample(nrow(userES)),]
   })
   
   site_type<-eventReactive(input$load,{
