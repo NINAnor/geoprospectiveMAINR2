@@ -62,7 +62,7 @@ callback <- c(
 #' mod_delphi_round2 Server Functions
 #'
 #' @noRd 
-mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_round,comb, bands, table_con, coords){
+mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_round,comb, bands, table_con, coords, site_type){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
     
@@ -740,7 +740,12 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
         incProgress(amount = 0.2,message = "prepare training data")
 
         #cellsize
-        resolution<-250*250
+        if(site_type == "onshore"){
+          resolution<-250^2
+        }else{
+          resolution<-500^2
+        }
+        
         
         ## N background (outside poly points) according to area of extrapolation
         A_roi<-as.numeric(st_area(sf_bound))

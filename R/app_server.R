@@ -52,7 +52,7 @@ labels <- c("low", "moderate", "intermediate", "high","very high")
 cols   <- c("#e80909", "#fc8803", "#d8e03f", "#c4f25a","#81ab1f")
 vis_ind <- list(min = 0, max = 1, palette = cols, values = labels)
 
-bands <- list("landcover")
+
 # rgee::ee_Initialize(user = 'reto.spielhofer@nina.no')
 
 app_server <- function(input, output, session) {
@@ -175,14 +175,67 @@ app_server <- function(input, output, session) {
     site_geom_ee<- paste0('projects/eu-wendy/assets/study_sites/', input$site_id)
     site_geom_ee <- ee$FeatureCollection(site_geom_ee)
     if(site_type == "onshore"){
-      lulc <- ee$Image("COPERNICUS/CORINE/V20/100m/2018")
-      lulc<-lulc$resample("bilinear")$reproject(crs= "EPSG:4326",scale=100)
-      lulc<-lulc$clip(site_geom_ee)
+      # landcover
+      on_lulc <- ee$Image("COPERNICUS/CORINE/V20/100m/2018")
+      on_lulc<-on_lulc$resample("bilinear")$reproject(crs= "EPSG:4326",scale=100)
+      on_lulc<-on_lulc$clip(site_geom_ee)$rename("on_lulc")
       
-      comb<-ee$Image$cat(lulc)
+      #Hill et al., 2022: ecosystem integrity (structure, composition, and function against current actual potential as baseline) (0-1)
+      on_int<-"projects/eu-wendy/assets/ON_INT"
+      on_int<-ee$Image(on_int)
+      on_int<-on_int$clip(site_geom_ee)
+      on_int<-on_int$resample("bilinear")$reproject(crs= "EPSG:4326")
+      on_int<-on_int$rename("on_int")
+      
+      # global friction surface (land-based accessibility using motorized vehicles)
+      on_acc = ee$Image('Oxford/MAP/friction_surface_2019')$select("friction")
+      on_acc<-on_acc$resample("bilinear")$reproject(crs= "EPSG:4326")
+      on_acc<-on_acc$clip(site_geom_ee)$rename("on_acc")
+      
+      comb<-ee$Image$cat(on_lulc,on_int,on_acc)
     }else{
       
+      #bathymetry
+      off_bat = ee$Image('NOAA/NGDC/ETOPO1')$select('bedrock')
+      off_bat<-off_bat$resample("bilinear")$reproject(crs= "EPSG:4326")
+      off_bat<-off_bat$clip(site_geom_ee)
+      
+      ## lulc sea
+      off_lulc<-"projects/eu-wendy/assets/OFF_LULC"
+      off_lulc<-ee$Image(off_lulc)
+      off_lulc<-off_lulc$clip(site_geom_ee)
+      off_lulc<-off_lulc$resample("bilinear")$reproject(crs= "EPSG:4326",scale=1000)
+      off_lulc<-off_lulc$rename("off_lulc")
+      
+      # dist coast
+      off_acc<-"projects/eu-wendy/assets/OFF_ACC"
+      off_acc<-ee$Image(off_acc)
+      off_acc<-off_acc$clip(site_geom_ee)
+      off_acc<-off_acc$resample("bilinear")$reproject(crs= "EPSG:4326",scale=1000)
+      off_acc<-off_acc$rename("off_acc")
+      
+      #Human Impacts to Marine Ecosystems
+      off_nat<-"projects/eu-wendy/assets/OFF_NAT"
+      off_nat<-ee$Image(off_nat)
+      off_nat<-off_nat$clip(site_geom_ee)
+      off_nat<-off_nat$resample("bilinear")$reproject(crs= "EPSG:4326",scale=1000)
+      off_nat<-off_nat$rename("off_nat")
+      
+      comb<-ee$Image$cat(off_bat,off_lulc,off_acc,off_nat)
     }
+  })
+  
+  bands<-eventReactive(input$sub0,{
+    req(site_type)
+    site_type<-site_type()
+    
+    if(site_type == "onshore"){
+      bands<-list("on_lulc","on_int","on_acc")
+    }else{
+      bands<-list("off_bat","off_lulc","off_ac","off_nat")
+    }
+    
+    
   })
   
   num_tabs<-eventReactive(input$load,{
@@ -217,9 +270,9 @@ app_server <- function(input, output, session) {
     userES<-userES()
     sf_bound<-sf_bound()
     comb<-comb()
+    bands<-bands()
     userID<-user_id()
-    # site_type<-site_type()
-    # blog_dat_all<-blog_dat_all()
+    site_type<-site_type()
     coords<-coords()
 
 
@@ -239,9 +292,9 @@ app_server <- function(input, output, session) {
                                          as.numeric(i),
                                          comb,
                                          bands,
-                                         # blog_dat_all,
                                          table_con,
-                                         coords
+                                         coords,
+                                         site_type
                                          )
       #reactive value from module as event
       observeEvent(rv$a(), {
