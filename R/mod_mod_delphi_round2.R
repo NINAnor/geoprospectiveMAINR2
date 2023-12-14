@@ -246,7 +246,7 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
           )
         )
         ## trigger reactive value as a feedback of the maplight module
-        rv1$u <- mod_map_light_server("newmap_R1",sf_bound, comb, bands, esID_sel, userID_sel, studyID, img_CV1, coords, vis_ind, userES_sel,table_con,mapping_round)
+        rv1$u <- mod_map_light_server("newmap_R1",sf_bound, comb, bands, esID_sel, userID_sel, studyID, img_CV1, coords, vis_ind, userES_sel,table_con,mapping_round,site_type)
         
       }else{
         
@@ -376,10 +376,16 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
       # edi<-rv$edits()$finished
       rectangles <-rv$edits()$all
       
+      if(site_type = "onshore"){
+        resolution = 250^2
+      }else{
+        resolution = 500^2
+      }
+      
       n_poly<-nrow(as.data.frame(rectangles))
       
       #with res of 250m grid we can sample at least 10 pts with variaton within 0.6km2
-      A_min<-250*250*sqrt(10)
+      A_min<-resolution*sqrt(10)
       A_max<-0.05*round(as.numeric(st_area(sf_bound)),0)
       
       if(n_poly==1){

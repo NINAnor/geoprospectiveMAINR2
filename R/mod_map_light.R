@@ -22,7 +22,7 @@ mod_map_light_ui <- function(id){
 #' map_light Server Functions
 #'
 #' @noRd 
-mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel, studyID, img_all, coords, maxentviz, es_descr_sel,table_con, order){
+mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel, studyID, img_all, coords, maxentviz, es_descr_sel,table_con, order,site_type){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
     
@@ -86,10 +86,15 @@ mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel,
     
     ## check for intersecting polys
     observe({
+      if(site_type = "onshore"){
+        resolution = 250^2
+      }else{
+        resolution = 500^2
+      }
       req(rv$edits)
       rectangles <- rv$edits()$all
       n_poly<-nrow(as.data.frame(rectangles))
-      A_min<-250*250*sqrt(10)
+      A_min<-resolution*sqrt(10)
       A_max<-0.05*round(as.numeric(st_area(sf_bound)),0)
       
       if(n_poly==1){
@@ -368,7 +373,11 @@ mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel,
         ############ training pts
         incProgress(amount = 0.2,message = "prepare training data")
         
-        resolution<-250*250
+        if(site_type = "onshore"){
+          resolution = 250^2
+        }else{
+          resolution = 500^2
+        }
         
         ## N background (outside poly points) according to area of extrapolation
         A_roi<-as.numeric(st_area(sf_bound))
