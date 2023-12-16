@@ -37,7 +37,7 @@ table_con<-data.frame(
   billing =project
 )
 
-rgee::ee_Initialize(user = 'reto.spielhofer@nina.no')
+# rgee::ee_Initialize(user = 'reto.spielhofer@nina.no')
 
 
 con <- dbConnect(
@@ -60,33 +60,31 @@ app_server <- function(input, output, session) {
   
   hideTab(inputId = "inTabset", target = "p1")
   # check site id and email
-  mapper_mail<-eventReactive(input$site_id,{
-    user_conf<-tbl(con, "user_conf")
-    mapper<-tbl(con, "mapper")
-    mapper_mail<-left_join(user_conf,mapper,by="userID")
-    mapper_mail <- select(mapper_mail, userID, userMAIL, siteID)%>%filter(userMAIL!="")%>%collect()
-    
-  })
+  # mapper_mail<-eventReactive(input$site_id,{
+  #   user_conf<-tbl(con, "user_conf")
+  #   mapper<-tbl(con, "mapper")
+  #   mapper_mail<-left_join(user_conf,mapper,by="userID")
+  #   mapper_mail <- select(mapper_mail, userID, userMAIL, siteID)%>%filter(userMAIL!="")%>%collect()
+  #   
+  # })
   
   studies<-eventReactive(input$site_id,{
     study_site<-tbl(con, "study_site")
     studies<-study_site%>%select(siteID,siteTYPE,siteNMAPPING,siteCREATETIME,siteSTATUS)%>%collect()
-    studies$siteCREATETIME<-as.POSIXct(studies$siteCREATETIME)
+    # studies$siteCREATETIME<-as.POSIXct(studies$siteCREATETIME)
   })
   
   observeEvent(input$site_id,{
-    req(mapper_mail)
     req(studies)
     studies<-studies()
-    mapper_mail<-mapper_mail()
-    if(input$site_id %in% mapper_mail$siteID){
+    if(input$site_id %in% studies$siteID){
       studies<-studies%>%filter(siteID == input$site_id)%>%
         arrange(desc(as.POSIXct(siteCREATETIME)))%>%first()
       if(studies$siteSTATUS == "round2_open"){
         output$cond_0<-renderUI({
           tagList(
             textInput("user_mail","Enter the email you have been contacted with"),
-            uiOutput("cond_1")%>% withSpinner()
+            uiOutput("cond_1")%>%withSpinner()
           )
         })
         
@@ -97,41 +95,61 @@ app_server <- function(input, output, session) {
       }
     }else{
         output$cond_0<-renderUI({
-                    h5("invalid siteID, contact the administrator")
+                    h5("siteID not found, contact the administrator")
         })
     }
   })
   
-  userR2<-eventReactive(input$site_id,{
-    userR2<-tbl(con, "es_mappingR2")
-    userR2<-left_join(userR2,user_conf,by="userID")%>%collect()
-    userR2<- userR2%>%select(siteID, userID)%>%filter(siteID == input$site_id)
+
+  
+  # userR1<-eventReactive(input$site_id,{
+  #   userR1<-tbl(con, "es_mappingR1")
+  #   user_conf<-tbl(con, "user_conf")
+  #   userR1<-left_join(userR1,user_conf,by="userID")%>%collect()
+  #   userR1<- userR1%>%select(siteID, userID)%>%filter(siteID == input$site_id)
+  # })
+  
+  userID<-eventReactive(input$user_mail,{
+    user_conf<-tbl(con, "user_conf")%>%collect()
+    
+    if(input$user_mail %in% user_conf$userMAIL){
+      user_conf<-user_conf%>%filter(userMAIL == input$user_mail)
+      userR1<-tbl(con, "es_mappingR1")%>%
+        select(userID,siteID,esID)%>%group_by(userID,siteID)%>%summarise(n = n_distinct(esID))%>%
+        collect()
+      userR1<-userR1%>%filter(siteID == input$site_id)%>%left_join(user_conf,userR1,by="userID")
+      userID<- userR1%>%filter(userMAIL == input$user_mail)%>%select(userID)
+    }else{
+      userID<-data.frame()
+    }
+ 
   })
   
   observeEvent(input$user_mail,{
-    userR2<-userR2()
-    
-    if(input$user_mail %in% mapper_mail$userMAIL){
-      mapper_mail<-mapper_mail%>%filter(userMAIL == input$user_mail)
-      if(!(mapper_mail$userID %in% userR2$userID)){
-        output$cond_1<-renderUI({
-          actionButton("load","load your data")
-        })
-      }else{
-        output$cond_1<-renderUI({
-          h5("You have already compleated round 2, contact the administrator")
-        })
-      }
+    req(userID)
+    userID<-userID()
+    if(nrow(userID)>0){
+      output$cond_1<-renderUI({
+        actionButton("load","load your data")
+      })
     }else{
       output$cond_1<-renderUI({
         h5("invalid email address, contact the administrator")
       })
     }
   })
+  
 
+  
+  ###load study
+
+  observeEvent(input$load,{
+    rgee::ee_Initialize(user = 'reto.spielhofer@nina.no')
+  })
+  
   user_id<-eventReactive(input$load,{
-    uid<-mapper_mail%>%filter(siteID==input$site_id & userMAIL == input$user_mail)%>%select(userID)
-    user_id<-as.character(uid[1,])
+    userID<-userID()
+    user_id<-as.character(userID$userID)
     
   })
   

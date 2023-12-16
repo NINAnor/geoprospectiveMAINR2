@@ -376,7 +376,7 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
       # edi<-rv$edits()$finished
       rectangles <-rv$edits()$all
       
-      if(site_type = "onshore"){
+      if(site_type == "onshore"){
         resolution = 250^2
       }else{
         resolution = 500^2

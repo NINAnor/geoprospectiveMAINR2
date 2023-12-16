@@ -86,7 +86,7 @@ mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel,
     
     ## check for intersecting polys
     observe({
-      if(site_type = "onshore"){
+      if(site_type == "onshore"){
         resolution = 250^2
       }else{
         resolution = 500^2
@@ -373,7 +373,7 @@ mod_map_light_server <- function(id,sf_bound, comb, bands, esID_sel, userID_sel,
         ############ training pts
         incProgress(amount = 0.2,message = "prepare training data")
         
-        if(site_type = "onshore"){
+        if(site_type == "onshore"){
           resolution = 250^2
         }else{
           resolution = 500^2
