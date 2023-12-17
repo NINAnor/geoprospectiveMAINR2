@@ -84,7 +84,7 @@ app_server <- function(input, output, session) {
         output$cond_0<-renderUI({
           tagList(
             textInput("user_mail","Enter the email you have been contacted with"),
-            uiOutput("cond_1")%>%withSpinner()
+            uiOutput("cond_1")
           )
         })
         
@@ -102,40 +102,27 @@ app_server <- function(input, output, session) {
   
 
   
-  # userR1<-eventReactive(input$site_id,{
-  #   userR1<-tbl(con, "es_mappingR1")
-  #   user_conf<-tbl(con, "user_conf")
-  #   userR1<-left_join(userR1,user_conf,by="userID")%>%collect()
-  #   userR1<- userR1%>%select(siteID, userID)%>%filter(siteID == input$site_id)
-  # })
-  
-  userID<-eventReactive(input$user_mail,{
-    user_conf<-tbl(con, "user_conf")%>%collect()
+  observeEvent(input$user_mail,{
+    user_conf<-tbl(con, "user_conf")%>%filter(siteID == input$site_id)%>%collect()
     
     if(input$user_mail %in% user_conf$userMAIL){
-      user_conf<-user_conf%>%filter(userMAIL == input$user_mail)
-      userR1<-tbl(con, "es_mappingR1")%>%
-        select(userID,siteID,esID)%>%group_by(userID,siteID)%>%summarise(n = n_distinct(esID))%>%
-        collect()
-      userR1<-userR1%>%filter(siteID == input$site_id)%>%left_join(user_conf,userR1,by="userID")
-      userID<- userR1%>%filter(userMAIL == input$user_mail)%>%select(userID)
+      output$cond_1<-renderUI({
+        actionButton("load","load your data")
+      })
     }else{
-      userID<-data.frame()
+      output$cond_1<-renderUI({
+        h5("invalid email address for this study, contact the administrator")
+      })
     }
- 
   })
   
   observeEvent(input$user_mail,{
     req(userID)
     userID<-userID()
     if(nrow(userID)>0){
-      output$cond_1<-renderUI({
-        actionButton("load","load your data")
-      })
+
     }else{
-      output$cond_1<-renderUI({
-        h5("invalid email address, contact the administrator")
-      })
+
     }
   })
   
