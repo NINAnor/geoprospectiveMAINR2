@@ -116,17 +116,6 @@ app_server <- function(input, output, session) {
     }
   })
   
-  observeEvent(input$user_mail,{
-    req(userID)
-    userID<-userID()
-    if(nrow(userID)>0){
-
-    }else{
-
-    }
-  })
-  
-
   
   ###load study
 
