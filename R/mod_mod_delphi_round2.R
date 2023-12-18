@@ -62,7 +62,7 @@ callback <- c(
 #' mod_delphi_round2 Server Functions
 #'
 #' @noRd 
-mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_round,comb, bands, table_con, coords, site_type){
+mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, vis_cv,vis_diff, mapping_round,comb, bands, table_con, coords, site_type){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
     
@@ -123,10 +123,13 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
       img_ind_R1<-ee$Image(
         paste0(img_assetid_ind,studyID,"_",userES_sel$esID, "_", userID_sel, "_1")
       )
-      
+
       img_CV1<-ee$Image(
         paste0(img_assetid_all,studyID,"_",userES_sel$esID, "CV_1")
-      )
+        # a
+      )$select("probability_stdDev")$updateMask(img_CV1$lte(0.4))
+      
+
       
       Map$setCenter(mean(coords$X), mean(coords$Y),10)
       m1<-Map$addLayer(
@@ -136,7 +139,9 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
         name = "Your map from round 1"
       )| Map$addLayer(
         eeObject = img_CV1,
-        name = "all participants")+
+        vis_cv,
+        opacity = 0.4,
+        name = "Areas of consensus round 1")+
         Map$addLegend(vis_ind, name =paste0("Probability to benefit from ",userES_sel$esNAME) , color_mapping = "character")
       # 
       output$text0<-renderText(paste0("In the previous mapping round you have mapped ", userES_sel$esNAME, ". The maps below show the areas of high probability to benefit form ",userES_sel$esNAME,
@@ -202,8 +207,9 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
       Map$setCenter(mean(coords$X), mean(coords$Y),10)
       m1<-Map$addLayer(
         eeObject = img_CV1,
+        vis_cv,
         opacity = 0.4,
-        name = "all participants")+
+        name = "Areas of consensus round 1")+
         Map$addLegend(vis_ind, name =paste0("Probability to benefit from ",userES_sel$esNAME) , color_mapping = "character")
       
       
@@ -902,12 +908,12 @@ mod_mod_delphi_round2_server <- function(id, userES, sf_bound, vis_ind, mapping_
         incProgress(amount = 0.9,message = "prepare interactive map 2")
         
         ind_diff<-img_ind_R2$subtract(img_ind_R1)
-        ind_diff<-ind_diff$divide(img_ind_R2)
+        # ind_diff<-ind_diff$multiply(-1)
         
         Map$setCenter(mean(coords$X), mean(coords$Y),10)
         result2<- Map$addLayer(
           eeObject = ind_diff,
-          vis_ind,
+          vis_diff,
           "Difference between R1 - R2",
           opacity = 0.4)+
           Map$addLegend(vis_ind, name ="Relative difference new and old map" , color_mapping = "character", position = "topright")

@@ -18,6 +18,7 @@ app_ui <- function(request) {
                     h5("Please provide your study id that you received from the admin"),
                     br(),
                     textInput("site_id","Enter the site id from your invitation"),
+                    actionButton("check_site","check site"),
                     br(),
                     uiOutput("cond_0")
                   ),

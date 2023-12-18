@@ -50,7 +50,13 @@ con <- dbConnect(
 
 labels <- c("low", "moderate", "intermediate", "high","very high")
 cols   <- c("#e80909", "#fc8803", "#d8e03f", "#c4f25a","#81ab1f")
+cols_diff   <- c("#81ab1f", "#c4f25a", "#d8e03f", "#fc8803","#e80909")
+
+cols_cv   <- c("#81ab1f","#fc8803")
 vis_ind <- list(min = 0, max = 1, palette = cols, values = labels)
+
+vis_cv <- list(min = 0, max = 0.5, palette = cols_cv)
+vis_diff <- list(min = -1, max = 1, palette = cols_diff)
 
 
 # rgee::ee_Initialize(user = 'reto.spielhofer@nina.no')
@@ -68,22 +74,24 @@ app_server <- function(input, output, session) {
   #   
   # })
   
-  studies<-eventReactive(input$site_id,{
+  studies<-eventReactive(input$check_site,{
     study_site<-tbl(con, "study_site")
     studies<-study_site%>%select(siteID,siteTYPE,siteNMAPPING,siteCREATETIME,siteSTATUS)%>%collect()
     # studies$siteCREATETIME<-as.POSIXct(studies$siteCREATETIME)
   })
   
-  observeEvent(input$site_id,{
+  observeEvent(input$check_site,{
     req(studies)
     studies<-studies()
     if(input$site_id %in% studies$siteID){
       studies<-studies%>%filter(siteID == input$site_id)%>%
         arrange(desc(as.POSIXct(siteCREATETIME)))%>%first()
       if(studies$siteSTATUS == "round2_open"){
+        removeUI("#check_site")
         output$cond_0<-renderUI({
           tagList(
             textInput("user_mail","Enter the email you have been contacted with"),
+            actionButton("check_mail","check mail"),
             uiOutput("cond_1")
           )
         })
@@ -101,11 +109,17 @@ app_server <- function(input, output, session) {
   })
   
 
+  user_conf<-eventReactive(input$check_mail,{
+    user_conf<-tbl(con, "user_conf")%>%collect()
+    user_conf<-user_conf%>%filter(siteID == input$site_id)
+  })
   
-  observeEvent(input$user_mail,{
-    user_conf<-tbl(con, "user_conf")%>%filter(siteID == input$site_id)%>%collect()
+  observeEvent(input$check_mail,{
+    req(user_conf)
+    user_conf<-user_conf()
     
     if(input$user_mail %in% user_conf$userMAIL){
+      removeUI("#check_mail")
       output$cond_1<-renderUI({
         actionButton("load","load your data")
       })
@@ -124,10 +138,13 @@ app_server <- function(input, output, session) {
   })
   
   user_id<-eventReactive(input$load,{
-    userID<-userID()
-    user_id<-as.character(userID$userID)
+    user_conf<-user_conf()
+    user_conf<-user_conf%>%filter(userMAIL == input$user_mail)
+    user_id<-as.character(user_conf$userID)
     
   })
+  
+  print("A")
   
   userES<-eventReactive(input$load,{
     req(user_id)
@@ -142,14 +159,15 @@ app_server <- function(input, output, session) {
       left_join(es_descr,by="esID")%>%collect()
     userES<-as.data.frame(userES)
     #shuffle rows randomly that not all the participants have the same order of mapping es
-    userES<-userES[sample(nrow(userES)),]
+    # userES<-userES[sample(nrow(userES)),]
   })
-  
+  print("B")
   site_type<-eventReactive(input$load,{
     req(studies)
     studies<-studies()
     site_type<-as.character(studies%>%filter(siteID==input$site_id)%>%select(siteTYPE)%>%first())
   })
+  print("C")
   
 
   sf_bound<-eventReactive(input$load,{
@@ -157,14 +175,14 @@ app_server <- function(input, output, session) {
     bound <- ee$FeatureCollection(assetid)
     sf_bound<-ee_as_sf(bound)
   })
-
+  print("D")
   coords<-eventReactive(input$load,{
     req(sf_bound)
     sf_bound<-sf_bound()
     coords <- st_coordinates(sf_bound)
     coords<-as.data.frame(coords[,c(1,2)])
   })
-  
+  print("E")
   comb<-eventReactive(input$load,{
     req(site_type)
     site_type<-site_type()
@@ -220,8 +238,8 @@ app_server <- function(input, output, session) {
       comb<-ee$Image$cat(off_bat,off_lulc,off_acc,off_nat)
     }
   })
-  
-  bands<-eventReactive(input$sub0,{
+  print("F")
+  bands<-eventReactive(input$load,{
     req(site_type)
     site_type<-site_type()
     
@@ -233,11 +251,11 @@ app_server <- function(input, output, session) {
     
     
   })
-  
+  print("F")
   num_tabs<-eventReactive(input$load,{
     req(userES)
     userES<-userES()
-    num_tabs<-as.numeric(nrow(userES))
+    num_tabs<-as.integer(nrow(userES))
   })
   
 ### create N remapping tabs
@@ -285,6 +303,8 @@ app_server <- function(input, output, session) {
                                          userES,
                                          sf_bound,
                                          vis_ind,
+                                         vis_cv,
+                                         vis_diff,
                                          as.numeric(i),
                                          comb,
                                          bands,
