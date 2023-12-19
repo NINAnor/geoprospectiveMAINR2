@@ -65,15 +65,7 @@ app_server <- function(input, output, session) {
   # Your application server logic
   
   hideTab(inputId = "inTabset", target = "p1")
-  # check site id and email
-  # mapper_mail<-eventReactive(input$site_id,{
-  #   user_conf<-tbl(con, "user_conf")
-  #   mapper<-tbl(con, "mapper")
-  #   mapper_mail<-left_join(user_conf,mapper,by="userID")
-  #   mapper_mail <- select(mapper_mail, userID, userMAIL, siteID)%>%filter(userMAIL!="")%>%collect()
-  #   
-  # })
-  
+
   studies<-eventReactive(input$check_site,{
     study_site<-tbl(con, "study_site")
     studies<-study_site%>%select(siteID,siteTYPE,siteNMAPPING,siteCREATETIME,siteSTATUS)%>%collect()
@@ -161,13 +153,12 @@ app_server <- function(input, output, session) {
     #shuffle rows randomly that not all the participants have the same order of mapping es
     # userES<-userES[sample(nrow(userES)),]
   })
-  print("B")
+  
   site_type<-eventReactive(input$load,{
     req(studies)
     studies<-studies()
     site_type<-as.character(studies%>%filter(siteID==input$site_id)%>%select(siteTYPE)%>%first())
   })
-  print("C")
   
 
   sf_bound<-eventReactive(input$load,{
@@ -175,15 +166,15 @@ app_server <- function(input, output, session) {
     bound <- ee$FeatureCollection(assetid)
     sf_bound<-ee_as_sf(bound)
   })
-  print("D")
+ 
   coords<-eventReactive(input$load,{
     req(sf_bound)
     sf_bound<-sf_bound()
     coords <- st_coordinates(sf_bound)
     coords<-as.data.frame(coords[,c(1,2)])
   })
-  print("E")
-  comb<-eventReactive(input$load,{
+
+    comb<-eventReactive(input$load,{
     req(site_type)
     site_type<-site_type()
     site_geom_ee<- paste0('projects/eu-wendy/assets/study_sites/', input$site_id)
@@ -238,7 +229,7 @@ app_server <- function(input, output, session) {
       comb<-ee$Image$cat(off_bat,off_lulc,off_acc,off_nat)
     }
   })
-  print("F")
+
   bands<-eventReactive(input$load,{
     req(site_type)
     site_type<-site_type()
@@ -251,7 +242,7 @@ app_server <- function(input, output, session) {
     
     
   })
-  print("F")
+  
   num_tabs<-eventReactive(input$load,{
     req(userES)
     userES<-userES()
